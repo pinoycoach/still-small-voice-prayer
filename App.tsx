@@ -193,7 +193,7 @@ const App: React.FC = () => {
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
           title: 'A Prayer for You',
-          text: 'Someone prayed for you. Pass this prayer forward. \u2014 stillsmallvoice.app',
+          text: 'Someone prayed for you. Pass this prayer forward. \u2014 stillsmallvoice.xyz',
           files: [file]
         });
       } else {

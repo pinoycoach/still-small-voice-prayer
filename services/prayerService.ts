@@ -465,7 +465,7 @@ export const renderSacredLetter = (prayer: PrayerResponse, options: LetterOption
     // Sharing CTA
     ctx.fillStyle = "rgba(120, 100, 50, 0.35)";
     ctx.font = `italic 16px "Georgia", "Times New Roman", serif`;
-    ctx.fillText("Pass this prayer forward \u2014 stillsmallvoice.app", centerX, y + 80);
+    ctx.fillText("Pass this prayer forward \u2014 stillsmallvoice.xyz", centerX, y + 80);
 
     resolve(canvas.toDataURL("image/png", 0.95));
   });
