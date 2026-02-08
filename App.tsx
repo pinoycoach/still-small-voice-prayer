@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { generatePrayerFromRequest, renderSacredLetter, cleanKJV, PrayerResponse, LetterOptions } from './services/prayerService';
 import { generateInworldTTS } from './services/inworldService';
 import Spinner from './components/Spinner';
+import { Analytics } from '@vercel/analytics/react';
 
 type AppPhase = 'composing' | 'generating' | 'viewing';
 
@@ -149,10 +150,20 @@ const App: React.FC = () => {
 
   // If viewing a shared prayer, render the viewer instead of the main app
   if (sharedPrayerId) {
-    return <SharedPrayerViewer prayerId={sharedPrayerId} />;
+    return (
+      <>
+        <SharedPrayerViewer prayerId={sharedPrayerId} />
+        <Analytics />
+      </>
+    );
   }
 
-  return <PrayerCreator />;
+  return (
+    <>
+      <PrayerCreator />
+      <Analytics />
+    </>
+  );
 };
 
 const PrayerCreator: React.FC = () => {
