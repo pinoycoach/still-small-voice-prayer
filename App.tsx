@@ -5,12 +5,17 @@ import Spinner from './components/Spinner';
 
 type AppPhase = 'composing' | 'generating' | 'viewing';
 
+/** Check if current URL is a shared prayer link: /p/[id] */
+const getSharedPrayerId = (): string | null => {
+  const match = window.location.pathname.match(/^\/p\/([a-z0-9]{6,12})$/);
+  return match ? match[1] : null;
+};
+
 /** Extract emotional keywords from prayer text for contextual spinner messages */
 const getContextualMessages = (text: string): string[] => {
   const lower = text.toLowerCase();
   const base = ["Searching Scripture...", "Writing with care..."];
 
-  // Match emotional themes to personalized messages
   if (lower.match(/anxious|anxiety|worry|worried|fear|afraid|scared/))
     return ["Finding peace for your worry...", "Searching for words of comfort...", ...base];
   if (lower.match(/sick|illness|healing|health|hospital|cancer|pain/))
@@ -30,16 +35,127 @@ const getContextualMessages = (text: string): string[] => {
   if (lower.match(/strength|tired|exhausted|overwhelmed|burnout|weary/))
     return ["Finding strength for the weary...", "Seeking rest for your spirit...", ...base];
 
-  return [
-    "Listening to your heart...",
-    "Finding the right words...",
-    "Weaving Scripture into prayer...",
-    "Preparing your sacred letter...",
-    ...base
-  ];
+  return ["Listening to your heart...", "Finding the right words...", "Weaving Scripture into prayer...", "Preparing your sacred letter...", ...base];
 };
 
+// ══════════════════════════════════════════════════════════════
+// SHARED PRAYER VIEWER — shown when visiting /p/[id]
+// ══════════════════════════════════════════════════════════════
+
+const SharedPrayerViewer: React.FC<{ prayerId: string }> = ({ prayerId }) => {
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [theme, setTheme] = useState<string>('');
+  const [dedicatedTo, setDedicatedTo] = useState<string | null>(null);
+  const [views, setViews] = useState<number>(0);
+  const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
+
+  useEffect(() => {
+    const fetchPrayer = async () => {
+      try {
+        const res = await fetch(`/api/get-prayer/${prayerId}`);
+        if (!res.ok) { setNotFound(true); setLoading(false); return; }
+        const data = await res.json();
+        if (!data.success || !data.prayer) { setNotFound(true); setLoading(false); return; }
+
+        setImageUrl(data.prayer.imageDataUrl);
+        setTheme(data.prayer.prayer?.theme || '');
+        setDedicatedTo(data.prayer.dedicatedTo || null);
+        setViews(data.prayer.views || 0);
+      } catch {
+        setNotFound(true);
+      }
+      setLoading(false);
+    };
+    fetchPrayer();
+  }, [prayerId]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center">
+        <p className="text-[#C9A050] italic animate-pulse">Loading prayer...</p>
+      </div>
+    );
+  }
+
+  if (notFound) {
+    return (
+      <div className="min-h-screen bg-[#050505] flex flex-col items-center justify-center px-6 text-center font-serif">
+        <div className="text-[#C9A050]/30 text-2xl mb-4">&#10013;</div>
+        <h1 className="text-2xl font-black text-[#C9A050] mb-2">Prayer Not Found</h1>
+        <p className="text-gray-500 text-sm mb-8 italic">
+          This prayer may have expired or the link is incorrect.
+        </p>
+        <a
+          href="/"
+          className="bg-[#C9A050] text-black px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-transform shadow-2xl shadow-[#C9A050]/20"
+        >
+          Write a Prayer
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#050505] text-[#E0D7C6] font-serif flex flex-col items-center justify-center px-6 py-8">
+      <div className="w-full max-w-lg flex flex-col items-center space-y-6 animate-fade-in">
+
+        {/* Dedication context */}
+        {dedicatedTo && (
+          <p className="text-[11px] italic text-[#C9A050]/60 tracking-wide">
+            A prayer written for {dedicatedTo}
+          </p>
+        )}
+
+        {/* Sacred letter image */}
+        {imageUrl && (
+          <img
+            src={imageUrl}
+            alt={`Prayer: ${theme}`}
+            className="w-full max-h-[70vh] object-contain rounded-lg shadow-2xl border border-white/10 ring-1 ring-[#C9A050]/20"
+          />
+        )}
+
+        {/* View count (subtle) */}
+        {views > 1 && (
+          <p className="text-gray-600 text-[10px] italic">
+            This prayer has been viewed {views} {views === 1 ? 'time' : 'times'}
+          </p>
+        )}
+
+        {/* CTA — Write Your Own */}
+        <a
+          href="/"
+          className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-[#C9A050] text-black rounded-xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-transform shadow-2xl shadow-[#C9A050]/20"
+        >
+          Write Your Own Prayer
+        </a>
+
+        <p className="text-center text-gray-600 text-[10px] italic">
+          Someone prayed for you today. Pass the blessing forward.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
+// MAIN APP — prayer creation flow
+// ══════════════════════════════════════════════════════════════
+
 const App: React.FC = () => {
+  // Check if this is a shared prayer URL
+  const [sharedPrayerId] = useState<string | null>(getSharedPrayerId);
+
+  // If viewing a shared prayer, render the viewer instead of the main app
+  if (sharedPrayerId) {
+    return <SharedPrayerViewer prayerId={sharedPrayerId} />;
+  }
+
+  return <PrayerCreator />;
+};
+
+const PrayerCreator: React.FC = () => {
   // Flow state — starts at composing, no idle gate
   const [phase, setPhase] = useState<AppPhase>('composing');
 
@@ -53,8 +169,11 @@ const App: React.FC = () => {
     prayer: PrayerResponse;
     imageUrl: string;
     speechText: string;
-    forFriend?: string; // remember who this prayer was for
+    forFriend?: string;
   } | null>(null);
+
+  // Share URL (generated after prayer creation)
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
 
   // Audio (InWorld returns MP3 — simple playback)
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -107,10 +226,10 @@ const App: React.FC = () => {
     if (!prayerRequest.trim()) return;
     if (prayerMode === 'friend' && !friendName.trim()) return;
 
-    // Set contextual spinner messages BEFORE switching phase
     setLoadingMessages(getContextualMessages(prayerRequest));
     setPhase('generating');
     setError(null);
+    setShareUrl(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -139,6 +258,26 @@ const App: React.FC = () => {
       setPhase('viewing');
       setPrayerRequest('');
       setFriendName('');
+
+      // Generate shareable URL in the background (non-blocking)
+      fetch('/api/share-prayer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prayer,
+          imageDataUrl: imageUrl,
+          dedicatedTo: prayerMode === 'friend' ? currentFriendName : undefined
+        })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && data.shareUrl) {
+            setShareUrl(data.shareUrl);
+            console.log(`[Share] Prayer URL: ${data.shareUrl}`);
+          }
+        })
+        .catch(err => console.warn('[Share] Could not generate share URL:', err));
+
     } catch (e) {
       console.error(e);
       setError("The prayer could not be written. Please try again.");
@@ -147,9 +286,7 @@ const App: React.FC = () => {
   };
 
   const playMp3 = (url: string) => {
-    if (audioRef.current) {
-      audioRef.current.pause();
-    }
+    if (audioRef.current) audioRef.current.pause();
     const audio = new Audio(url);
     audioRef.current = audio;
     audio.play();
@@ -157,18 +294,12 @@ const App: React.FC = () => {
 
   const handleListen = async () => {
     if (!prayerResult || isListening) return;
-
-    // If audio already generated, just replay
-    if (audioUrl) {
-      playMp3(audioUrl);
-      return;
-    }
+    if (audioUrl) { playMp3(audioUrl); return; }
 
     setIsListening(true);
     try {
       const base64Mp3 = await generateInworldTTS(prayerResult.speechText);
       if (!base64Mp3) throw new Error('TTS returned empty');
-      // Convert base64 MP3 to a blob URL for simple playback
       const binary = atob(base64Mp3);
       const bytes = new Uint8Array(binary.length);
       for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -190,13 +321,21 @@ const App: React.FC = () => {
       const blob = await res.blob();
       const file = new File([blob], 'sacred-prayer.png', { type: 'image/png' });
 
+      // Build share text with URL if available
+      const shareText = shareUrl
+        ? `Someone prayed for you. Read it here: ${shareUrl}`
+        : 'Someone prayed for you. Pass this prayer forward. \u2014 stillsmallvoice.xyz';
+
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         await navigator.share({
-          title: 'A Prayer for You',
-          text: 'Someone prayed for you. Pass this prayer forward. \u2014 stillsmallvoice.xyz',
+          title: prayerResult.forFriend
+            ? `A prayer for ${prayerResult.forFriend}`
+            : 'A Prayer for You',
+          text: shareText,
           files: [file]
         });
       } else {
+        // Desktop fallback: copy image to clipboard
         await navigator.clipboard.write([
           new ClipboardItem({ 'image/png': blob })
         ]);
@@ -221,13 +360,13 @@ const App: React.FC = () => {
   };
 
   const handleWriteAnother = () => {
-    // Show acknowledgment of the prayer that was just created
     if (prayerResult?.forFriend) {
       setSentAcknowledgment(`Your prayer for ${prayerResult.forFriend} was written with love.`);
     } else if (prayerResult) {
       setSentAcknowledgment(`Your prayer was received.`);
     }
     setPrayerResult(null);
+    setShareUrl(null);
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
     if (audioRef.current) { audioRef.current.pause(); audioRef.current = null; }
@@ -244,7 +383,7 @@ const App: React.FC = () => {
       {phase === 'composing' && (
         <div className="w-full max-w-lg space-y-6 animate-fade-in">
 
-          {/* Brand header — minimal, warm */}
+          {/* Brand header */}
           <div className="text-center space-y-3 mb-2">
             <div className="text-[#C9A050]/30 text-2xl">&#10013;</div>
             <h1 className="text-2xl md:text-3xl font-black italic tracking-tight text-[#C9A050]">
@@ -252,14 +391,14 @@ const App: React.FC = () => {
             </h1>
           </div>
 
-          {/* Acknowledgment of previous prayer (fades in/out) */}
+          {/* Acknowledgment of previous prayer */}
           {sentAcknowledgment && (
             <div className="text-center animate-fade-in">
               <p className="text-[11px] italic text-[#C9A050]/70 tracking-wide">{sentAcknowledgment}</p>
             </div>
           )}
 
-          {/* Mode toggle — gently nudges toward friend mode */}
+          {/* Mode toggle */}
           <div className="flex justify-center">
             <div className="flex bg-white/5 rounded-lg p-0.5">
               <button
@@ -294,7 +433,7 @@ const App: React.FC = () => {
             />
           )}
 
-          {/* Textarea — the soul of the app */}
+          {/* Textarea */}
           <textarea
             ref={textareaRef}
             value={prayerRequest}
@@ -315,7 +454,7 @@ const App: React.FC = () => {
             {prayerMode === 'self' ? 'Pray' : `Pray for ${friendName || '...'}`}
           </button>
 
-          {/* Gentle nudge toward friend mode — only shows in self mode after first use */}
+          {/* Gentle nudge toward friend mode */}
           {prayerMode === 'self' && sentAcknowledgment && (
             <button
               onClick={() => setPrayerMode('friend')}
@@ -360,7 +499,6 @@ const App: React.FC = () => {
 
           {/* Secondary actions row */}
           <div className="flex gap-3 justify-center">
-            {/* Listen */}
             <button
               onClick={handleListen}
               disabled={isListening}
@@ -372,7 +510,6 @@ const App: React.FC = () => {
               {isListening ? 'Loading...' : audioUrl ? 'Listen Again' : 'Listen'}
             </button>
 
-            {/* Save */}
             <button
               onClick={handleSave}
               className="flex items-center gap-2 px-5 py-2.5 bg-white/5 border border-white/10 rounded-full text-[10px] uppercase font-bold tracking-widest hover:bg-white/10 transition-all"
