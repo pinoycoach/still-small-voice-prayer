@@ -1,10 +1,11 @@
 /**
- * GET /api/get-prayer/[id]
+ * GET /api/get-prayer?id=xxxxx
  *
  * Retrieves a prayer from Vercel Blob Storage by short ID.
  * Returns the prayer data or 404 if not found.
  *
- * Uses Node.js runtime (not Edge) because @vercel/blob requires Node.js modules.
+ * Flat route (no nested [id] folder) for reliable Vercel deployment.
+ * Uses Node.js runtime because @vercel/blob requires Node.js modules.
  */
 
 import { list } from '@vercel/blob';

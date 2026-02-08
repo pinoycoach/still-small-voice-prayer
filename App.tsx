@@ -11,6 +11,9 @@ const getSharedPrayerId = (): string | null => {
   return match ? match[1] : null;
 };
 
+/** Check if current URL is the privacy page */
+const isPrivacyPage = (): boolean => window.location.pathname === '/privacy';
+
 /** Extract emotional keywords from prayer text for contextual spinner messages */
 const getContextualMessages = (text: string): string[] => {
   const lower = text.toLowerCase();
@@ -53,7 +56,7 @@ const SharedPrayerViewer: React.FC<{ prayerId: string }> = ({ prayerId }) => {
   useEffect(() => {
     const fetchPrayer = async () => {
       try {
-        const res = await fetch(`/api/get-prayer/${prayerId}`);
+        const res = await fetch(`/api/get-prayer?id=${prayerId}`);
         if (!res.ok) { setNotFound(true); setLoading(false); return; }
         const data = await res.json();
         if (!data.success || !data.prayer) { setNotFound(true); setLoading(false); return; }
@@ -140,6 +143,93 @@ const SharedPrayerViewer: React.FC<{ prayerId: string }> = ({ prayerId }) => {
 };
 
 // ══════════════════════════════════════════════════════════════
+// PRIVACY & CONTACT PAGE — /privacy
+// ══════════════════════════════════════════════════════════════
+
+const PrivacyPage: React.FC = () => {
+  return (
+    <div className="min-h-screen bg-[#050505] text-[#E0D7C6] font-serif flex flex-col items-center px-6 py-12">
+      <div className="w-full max-w-lg space-y-8 animate-fade-in">
+
+        {/* Header */}
+        <div className="text-center space-y-3">
+          <a href="/" className="text-[#C9A050]/30 text-2xl inline-block hover:text-[#C9A050]/60 transition-colors">&#10013;</a>
+          <h1 className="text-2xl font-black italic tracking-tight text-[#C9A050]">
+            Privacy & Contact
+          </h1>
+          <p className="text-gray-500 text-xs italic">Last updated: February 2026</p>
+        </div>
+
+        {/* Privacy */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#C9A050]/80">Your Privacy</h2>
+          <div className="text-sm text-gray-400 leading-relaxed space-y-3">
+            <p>
+              Still Small Voice is built to serve, not to surveil. We believe your prayers are between you and God.
+            </p>
+            <p>
+              <strong className="text-[#E0D7C6]">What we don't collect:</strong> We do not store your name, email, location, or any personal data. We do not use cookies for tracking. We do not sell or share any data with third parties.
+            </p>
+            <p>
+              <strong className="text-[#E0D7C6]">Shared prayers:</strong> When you share a prayer, the prayer text and image are stored temporarily so the recipient can view it via a unique link. Shared prayers do not contain any identifying information about you.
+            </p>
+            <p>
+              <strong className="text-[#E0D7C6]">AI processing:</strong> Your prayer requests are processed by AI to generate personalized prayers grounded in Scripture. These requests are not stored after the prayer is generated.
+            </p>
+          </div>
+        </section>
+
+        {/* Contact */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#C9A050]/80">Contact Us</h2>
+          <div className="text-sm text-gray-400 leading-relaxed space-y-3">
+            <p>
+              We'd love to hear from you — whether it's feedback, a testimony, a prayer request, or a question about the app.
+            </p>
+            <p>
+              <strong className="text-[#E0D7C6]">Email:</strong>{' '}
+              <a href="mailto:hello@stillsmallvoice.xyz" className="text-[#C9A050] hover:underline">
+                hello@stillsmallvoice.xyz
+              </a>
+            </p>
+          </div>
+        </section>
+
+        {/* Coming Soon */}
+        <section className="space-y-3">
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#C9A050]/80">Coming Soon</h2>
+          <div className="text-sm text-gray-400 leading-relaxed space-y-2">
+            <p>We're prayerfully building more ways to bless you:</p>
+            <ul className="list-disc list-inside space-y-1 text-gray-500">
+              <li>Printed prayer letters &amp; cards</li>
+              <li>Framed sacred letters for your home</li>
+              <li>Prayer journals &amp; devotionals</li>
+            </ul>
+            <p className="text-[#C9A050]/60 italic text-xs mt-2">
+              "For I know the plans I have for you," declares the Lord. — Jeremiah 29:11
+            </p>
+          </div>
+        </section>
+
+        {/* Back */}
+        <div className="pt-4 text-center">
+          <a
+            href="/"
+            className="inline-block bg-[#C9A050] text-black px-6 py-3 rounded-xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-transform shadow-2xl shadow-[#C9A050]/20"
+          >
+            Write a Prayer
+          </a>
+        </div>
+
+        <p className="text-center text-gray-700 text-[9px] italic pt-4">
+          &copy; 2025–2026 Still Small Voice. All glory to God.
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ══════════════════════════════════════════════════════════════
 // MAIN APP — prayer creation flow
 // ══════════════════════════════════════════════════════════════
 
@@ -147,7 +237,11 @@ const App: React.FC = () => {
   // Check if this is a shared prayer URL
   const [sharedPrayerId] = useState<string | null>(getSharedPrayerId);
 
-  // If viewing a shared prayer, render the viewer instead of the main app
+  // Route to the right page
+  if (isPrivacyPage()) {
+    return <PrivacyPage />;
+  }
+
   if (sharedPrayerId) {
     return <SharedPrayerViewer prayerId={sharedPrayerId} />;
   }
@@ -530,6 +624,15 @@ const PrayerCreator: React.FC = () => {
           </button>
 
           {error && <p className="text-red-400 text-xs italic text-center">{error}</p>}
+        </div>
+      )}
+
+      {/* Footer — subtle privacy link */}
+      {phase !== 'generating' && (
+        <div className="mt-8 text-center">
+          <a href="/privacy" className="text-gray-700 text-[9px] uppercase tracking-widest hover:text-[#C9A050]/60 transition-colors">
+            Privacy & Contact
+          </a>
         </div>
       )}
     </div>
