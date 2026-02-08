@@ -3,39 +3,33 @@
  *
  * Stores a prayer as a JSON blob in Vercel Blob Storage.
  * Returns a short shareable URL.
+ *
+ * Uses Node.js runtime (not Edge) because @vercel/blob requires Node.js modules.
  */
 
 import { put } from '@vercel/blob';
 
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'nodejs' };
 
-export default async function handler(request) {
-  if (request.method === 'OPTIONS') {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-    });
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
   }
 
-  if (request.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
   }
 
   try {
-    const { prayer, imageDataUrl, dedicatedTo } = await request.json();
+    const { prayer, imageDataUrl, dedicatedTo } = req.body;
 
     if (!prayer || !imageDataUrl) {
-      return new Response(JSON.stringify({ error: 'Missing prayer or image data' }), {
-        status: 400,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
+      return res.status(400).json({ error: 'Missing prayer or image data' });
     }
 
     // Generate short ID (8 chars)
@@ -57,29 +51,23 @@ export default async function handler(request) {
       contentType: 'application/json',
     });
 
-    const origin = new URL(request.url).origin;
+    // Build share URL from request headers
+    const protocol = req.headers['x-forwarded-proto'] || 'https';
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    const origin = `${protocol}://${host}`;
     const shareUrl = `${origin}/p/${shortId}`;
 
     console.log(`[share-prayer] Stored ${shortId} → ${blob.url}`);
 
-    return new Response(JSON.stringify({
+    return res.status(200).json({
       success: true,
       shortId,
       shareUrl,
       blobUrl: blob.url
-    }), {
-      status: 200,
-      headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-      },
     });
 
   } catch (error) {
     console.error('[share-prayer] Error:', error);
-    return new Response(JSON.stringify({ error: 'Internal error', message: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
+    return res.status(500).json({ error: 'Internal error', message: error.message });
   }
 }
