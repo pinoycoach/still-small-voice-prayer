@@ -1,17 +1,15 @@
 /**
  * POST /api/share-prayer
  *
- * Stores a prayer in Upstash Redis with 30-day TTL.
+ * Stores a prayer as a JSON blob in Vercel Blob Storage.
  * Returns a short shareable URL.
- *
- * Body: { prayer, imageDataUrl, dedicatedTo? }
- * Returns: { success, shortId, shareUrl }
  */
+
+import { put } from '@vercel/blob';
 
 export const config = { runtime: 'edge' };
 
 export default async function handler(request) {
-  // CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -40,22 +38,10 @@ export default async function handler(request) {
       });
     }
 
-    // Generate short ID (8 chars, URL-safe)
+    // Generate short ID (8 chars)
     const { customAlphabet } = await import('nanoid');
     const nanoid = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 8);
     const shortId = nanoid();
-
-    // Store in Upstash Redis with 30-day TTL
-    const upstashUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-    const upstashToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-    if (!upstashUrl || !upstashToken) {
-      console.error('[share-prayer] Upstash not configured');
-      return new Response(JSON.stringify({ error: 'Storage not configured' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
-    }
 
     const prayerData = {
       prayer,
@@ -65,34 +51,22 @@ export default async function handler(request) {
       views: 0
     };
 
-    // SET with EX (expire in 30 days = 2592000 seconds)
-    const redisResponse = await fetch(`${upstashUrl}/set/prayer:${shortId}?EX=2592000`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${upstashToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(prayerData),
+    // Store as a JSON blob in Vercel Blob Storage
+    const blob = await put(`prayers/${shortId}.json`, JSON.stringify(prayerData), {
+      access: 'public',
+      contentType: 'application/json',
     });
-
-    if (!redisResponse.ok) {
-      const err = await redisResponse.text();
-      console.error('[share-prayer] Redis error:', err);
-      return new Response(JSON.stringify({ error: 'Failed to store prayer' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
-    }
 
     const origin = new URL(request.url).origin;
     const shareUrl = `${origin}/p/${shortId}`;
 
-    console.log(`[share-prayer] Stored prayer:${shortId} → ${shareUrl}`);
+    console.log(`[share-prayer] Stored ${shortId} → ${blob.url}`);
 
     return new Response(JSON.stringify({
       success: true,
       shortId,
-      shareUrl
+      shareUrl,
+      blobUrl: blob.url
     }), {
       status: 200,
       headers: {

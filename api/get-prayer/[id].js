@@ -1,16 +1,15 @@
 /**
  * GET /api/get-prayer/[id]
  *
- * Retrieves a prayer from Upstash Redis by short ID.
- * Increments view count.
- *
- * Returns: { success, prayer } or 404 if expired/not found.
+ * Retrieves a prayer from Vercel Blob Storage by short ID.
+ * Returns the prayer data or 404 if not found.
  */
+
+import { list } from '@vercel/blob';
 
 export const config = { runtime: 'edge' };
 
 export default async function handler(request) {
-  // CORS preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 200,
@@ -22,7 +21,6 @@ export default async function handler(request) {
     });
   }
 
-  // Extract the short ID from the URL path
   const url = new URL(request.url);
   const pathParts = url.pathname.split('/');
   const shortId = pathParts[pathParts.length - 1];
@@ -34,56 +32,27 @@ export default async function handler(request) {
     });
   }
 
-  const upstashUrl = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-  const upstashToken = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
-
-  if (!upstashUrl || !upstashToken) {
-    return new Response(JSON.stringify({ error: 'Storage not configured' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    });
-  }
-
   try {
-    // GET from Redis
-    const redisResponse = await fetch(`${upstashUrl}/get/prayer:${shortId}`, {
-      headers: { 'Authorization': `Bearer ${upstashToken}` },
-    });
+    // Find the blob by prefix
+    const { blobs } = await list({ prefix: `prayers/${shortId}.json`, limit: 1 });
 
-    if (!redisResponse.ok) {
-      return new Response(JSON.stringify({ error: 'Storage error' }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-      });
-    }
-
-    const redisData = await redisResponse.json();
-
-    if (!redisData.result) {
+    if (!blobs || blobs.length === 0) {
       return new Response(JSON.stringify({ error: 'Prayer not found or expired' }), {
         status: 404,
         headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
       });
     }
 
-    // Parse prayer data (Upstash returns the value as a string or object)
-    let prayerData;
-    if (typeof redisData.result === 'string') {
-      prayerData = JSON.parse(redisData.result);
-    } else {
-      prayerData = redisData.result;
+    // Fetch the actual blob content
+    const blobResponse = await fetch(blobs[0].url);
+    if (!blobResponse.ok) {
+      return new Response(JSON.stringify({ error: 'Failed to retrieve prayer' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
+      });
     }
 
-    // Increment view count (fire and forget — don't block response)
-    const updatedData = { ...prayerData, views: (prayerData.views || 0) + 1 };
-    fetch(`${upstashUrl}/set/prayer:${shortId}?KEEPTTL=true`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${upstashToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(updatedData),
-    }).catch(err => console.error('[get-prayer] Failed to increment views:', err));
+    const prayerData = await blobResponse.json();
 
     return new Response(JSON.stringify({
       success: true,
